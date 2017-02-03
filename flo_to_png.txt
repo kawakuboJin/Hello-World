@@ -1,0 +1,98 @@
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <algorithm>
+#include <functional>
+#include <opencv2/opencv.hpp>
+#include <opencv2/stitching/stitcher.hpp>
+#include <opencv2/features2d/features2d.hpp>
+#include<opencv2/nonfree/nonfree.hpp>
+#include<opencv2/legacy/legacy.hpp>
+
+int ReadFlowFile(const std::string& filePath, cv::Mat& flow){
+
+	if (filePath.empty()){
+		std::cout << "flow path string is empty!" << std::endl;
+		return 1;
+	}
+	auto dot = filePath.find_last_of('.');
+	std::string dotSubStr = filePath.substr(dot + 1, filePath.size() - dot);
+	if (dotSubStr != "flo"){
+		std::cout << "File must be .flo!" << std::endl;
+		return 2;
+	}
+
+	std::ifstream ifs(filePath, std::ios::binary);
+	char str[4];
+	ifs.read(str, 4);
+	int width, height;
+	ifs.read((char*)&width, 4);
+	ifs.read((char*)&height, 4);
+
+	flow = cv::Mat::zeros(height, width, CV_32FC2);
+	for (int r = 0; r < flow.rows; r++){
+		for (int c = 0; c < flow.cols; c++){
+			float u, v;
+			ifs.read((char*)&u, 4);
+			ifs.read((char*)&v, 4);
+			flow.at<cv::Point2f>(r, c) = cv::Point2f(u, v);
+		}
+	}
+	ifs.close();
+	return 0;
+}
+
+void transFloToImg(Mat& flo, string img_name)
+{
+	Size size = flo.size();
+	int type = flo.type();
+
+	float* flo_data = (float*)flo.data;
+	int step_2 = flo.step / sizeof(flo_data[0]);
+
+	Mat img(size, CV_16UC3, Scalar(0, 0, 0));
+
+	ushort* img_data = (ushort*)img.data;
+	int step_3 = img.step / sizeof(img_data[0]);
+
+	for (int i = 0; i != size.height; ++i)
+		for (int j = 0; j != size.width; ++j)
+		{
+//			cout << *(flo_data + i * step_2 + j * 2 + 0) << " " << *(flo_data + i * step_2 + j * 2 + 1) << endl;
+
+			*(img_data + i * step_3 + j * 3 + 0) = (ushort) ( *(flo_data + i * step_2 + j * 2 + 0) );
+			*(img_data + i * step_3 + j * 3 + 1) = (ushort) ( *(flo_data + i * step_2 + j * 2 + 1) );
+
+			int x_ = cvRound(( (*(flo_data + i * step_2 + j * 2 + 0) - (int)(*(flo_data + i * step_2 + j * 2 + 0))) / 2) * 100);
+			int y_ = cvRound(( (*(flo_data + i * step_2 + j * 2 + 1) - (int)(*(flo_data + i * step_2 + j * 2 + 1))) / 2) * 100);
+
+			*(img_data + i * step_3 + j * 3 + 2) = x_ * 1000 + y_ * 10;
+//			cout << *(img_data + i * step_3 + j * 3 + 2) << endl;
+//			cout << *(flo_data + i * step_2 + j * 2 + 0) <<" "<< *(img_data + i * step_3 + j * 3 + 0) << endl;
+		}
+	vector<int> compression_params;
+	compression_params.push_back(CV_IMWRITE_PNG_STRATEGY_DEFAULT);
+
+	imwrite(img_name, img, compression_params);
+}
+
+void help()
+{
+	cout << "Please check out the input parameters" << endl
+		<< "the input parameters style must be" << endl
+		<< "main.exe d:/map.flo d:/xxx.png" << endl;
+}
+
+int main(int argc, char* argv[])
+{
+	if (argc != 3)
+	{
+		help();
+		return -1;
+	}
+	string input_path = argv[1];
+	string save_path = argv[2];
+	Mat flo;
+	ReadFlowFile(input_path, flo);
+	transFloToImg(flo, save_path);
+}
